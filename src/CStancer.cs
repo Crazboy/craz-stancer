@@ -24,7 +24,15 @@ namespace CStancer
         private float valSuspension = 0f, valTrack = 0f, valCamber = 0f;
         private float valWheelSize = 1.0f, valWheelWidth = 1.0f, valTireCollider = 0f;
 
-        private const string StateData = "cstancer:data";
+        // Individual State Bag Keys for reliable cross-client sync
+        private const string StateTrack        = "cstancer:track";
+        private const string StateCamber       = "cstancer:camber";
+        private const string StateSuspension   = "cstancer:suspension";
+        private const string StateWheelSize    = "cstancer:wheelsize";
+        private const string StateWheelWidth   = "cstancer:wheelwidth";
+        private const string StateTireCollider = "cstancer:tirecollider";
+        private const string StateTarget       = "cstancer:target";
+        private const string StateInitialized  = "cstancer:init";
 
         private const float ScaleSuspension   = 100f;
         private const float ScaleTrack        = 100f;
@@ -53,7 +61,7 @@ namespace CStancer
             SetupMenu();
             
             RegisterCommand("cstancer", new Action<int, List<object>, string>((s, a, r) => ToggleMenu()), false);
-            RegisterKeyMapping("cstancer", "Open CStancer Menu", "keyboard", ""); // Changed "none" to "" to fix startup error
+            RegisterKeyMapping("cstancer", "Open CStancer Menu", "keyboard", "");
 
             Tick += OnTick;
             Tick += OnDrawTick;
@@ -136,14 +144,10 @@ namespace CStancer
         }
 
         private async Task OnTick() {
-            await BaseScript.Delay(0);
             int ped = PlayerPedId();
             if (IsPedInAnyVehicle(ped, false)) {
                 currentVeh = GetVehiclePedIsIn(ped, false);
                 if (currentVeh != lastVeh) { SyncFromVehicle(currentVeh); lastVeh = currentVeh; }
-                UpdateDescriptions();
-                infoItem.Text = $"{GetVehicleMake(currentVeh)} {GetVehicleModel(currentVeh)}";
-                infoItem.Description = $"Size: {GetVehicleWheelSize(currentVeh):F2}  Width: {GetVehicleWheelWidth(currentVeh):F2}";
             } else {
                 currentVeh = -1;
                 if (lastVeh != -1) { lastVeh = -1; MenuController.CloseAllMenus(); }
@@ -172,11 +176,16 @@ namespace CStancer
                     Target = (int)CurrentWheelTarget
                 });
             }
-            await Task.FromResult(0);
         }
 
-        private static string GetVehicleMake(int veh) => GetMakeNameFromVehicleModel((uint)GetEntityModel(veh));
-        private static string GetVehicleModel(int veh) => GetDisplayNameFromVehicleModel((uint)GetEntityModel(veh));
+        private void SetRealValue(MenuSliderItem s, float v) {
+            if      (s == suspensionSlider)       valSuspension   = v;
+            else if (s == trackSlider)            valTrack        = v;
+            else if (s == camberSlider)           valCamber       = v;
+            else if (s == wheelSizeSlider)        valWheelSize    = v;
+            else if (s == wheelWidthSlider)       valWheelWidth   = v;
+            else if (s == tireColliderSizeSlider) valTireCollider = v;
+        }
 
         private void ApplyTypedValue(string target, float value) {
             if (currentVeh == -1) return;
@@ -192,22 +201,29 @@ namespace CStancer
 
         private void PushState() {
             if (currentVeh == -1 || !NetworkGetEntityIsNetworked(currentVeh)) return;
-            TriggerServerEvent("cstancer:reportStance", NetworkGetNetworkIdFromEntity(currentVeh), new Dictionary<string, object> {
-                ["track"] = valTrack, ["camber"] = valCamber, ["suspension"] = valSuspension,
-                ["wheelsize"] = valWheelSize, ["wheelwidth"] = valWheelWidth, ["tirecollider"] = valTireCollider,
-                ["wheeltarget"] = (int)CurrentWheelTarget
-            });
+            
+            // Set individual keys for perfect cross-language/cross-client sync
+            var state = (StateBag)((Entity)Entity.FromHandle(currentVeh)).State;
+            state.Set(StateTrack, valTrack, true);
+            state.Set(StateCamber, valCamber, true);
+            state.Set(StateSuspension, valSuspension, true);
+            state.Set(StateWheelSize, valWheelSize, true);
+            state.Set(StateWheelWidth, valWheelWidth, true);
+            state.Set(StateTireCollider, valTireCollider, true);
+            state.Set(StateTarget, (int)CurrentWheelTarget, true);
+            state.Set(StateInitialized, true, true);
         }
 
         private void ClearStance() {
             if (currentVeh == -1 || !NetworkGetEntityIsNetworked(currentVeh)) return;
-            TriggerServerEvent("cstancer:clearStance", NetworkGetNetworkIdFromEntity(currentVeh));
+            
+            var state = (StateBag)((Entity)Entity.FromHandle(currentVeh)).State;
+            state.Set(StateInitialized, false, true);
+
             valSuspension = 0f; valTrack = -GetVehicleWheelXOffset(currentVeh, 0);
             valCamber = GetVehicleWheelYRotation(currentVeh, 0);
-            valWheelSize = GetVehicleWheelSize(currentVeh); 
-            if (valWheelSize < 0.1f) valWheelSize = 1.0f;
-            valWheelWidth = GetVehicleWheelWidth(currentVeh);
-            if (valWheelWidth < 0.1f) valWheelWidth = 1.0f;
+            valWheelSize = GetVehicleWheelSize(currentVeh); if (valWheelSize < 0.1f) valWheelSize = 1.0f;
+            valWheelWidth = GetVehicleWheelWidth(currentVeh); if (valWheelWidth < 0.1f) valWheelWidth = 1.0f;
             valTireCollider = 0f;
             wheelTargetList.ListIndex = 0;
             UpdateSliderPositions();
@@ -215,15 +231,14 @@ namespace CStancer
 
         private void SyncFromVehicle(int veh) {
             var state = (StateBag)((Entity)Entity.FromHandle(veh)).State;
-            object data = state.Get(StateData);
-            if (data != null) {
-                valSuspension  = Utils.GetSafeFloat(data, "suspension");
-                valTrack       = Utils.GetSafeFloat(data, "track");
-                valCamber      = Utils.GetSafeFloat(data, "camber");
-                valWheelSize   = Utils.GetSafeFloat(data, "wheelsize", 1.0f);
-                valWheelWidth  = Utils.GetSafeFloat(data, "wheelwidth", 1.0f);
-                valTireCollider= Utils.GetSafeFloat(data, "tirecollider");
-                wheelTargetList.ListIndex = Utils.GetSafeInt(data, "wheeltarget");
+            if (Utils.GetStateBool(state, StateInitialized)) {
+                valSuspension   = Utils.GetStateFloat(state, StateSuspension);
+                valTrack        = Utils.GetStateFloat(state, StateTrack);
+                valCamber       = Utils.GetStateFloat(state, StateCamber);
+                valWheelSize    = Utils.GetStateFloat(state, StateWheelSize, 1.0f);
+                valWheelWidth   = Utils.GetStateFloat(state, StateWheelWidth, 1.0f);
+                valTireCollider = Utils.GetStateFloat(state, StateTireCollider);
+                wheelTargetList.ListIndex = Utils.GetStateInt(state, StateTarget);
             } else {
                 valSuspension = 0f; valTrack = -GetVehicleWheelXOffset(veh, 0); valCamber = GetVehicleWheelYRotation(veh, 0);
                 valWheelSize  = GetVehicleWheelSize(veh); if (valWheelSize < 0.1f) valWheelSize = 1.0f;
@@ -232,6 +247,7 @@ namespace CStancer
                 wheelTargetList.ListIndex = 0;
             }
             UpdateSliderPositions();
+            UpdateDescriptions();
         }
 
         private void UpdateSliderPositions() {
@@ -250,15 +266,11 @@ namespace CStancer
             wheelSizeSlider.Description        = $"V: {valWheelSize:F4}  |  Enter to type";
             wheelWidthSlider.Description       = $"V: {valWheelWidth:F4}  |  Enter to type";
             tireColliderSizeSlider.Description = $"V: {valTireCollider:F4}  |  Enter to type";
-        }
-
-        private void SetRealValue(MenuSliderItem s, float v) {
-            if      (s == suspensionSlider)       valSuspension   = v;
-            else if (s == trackSlider)            valTrack        = v;
-            else if (s == camberSlider)           valCamber       = v;
-            else if (s == wheelSizeSlider)        valWheelSize    = v;
-            else if (s == wheelWidthSlider)       valWheelWidth   = v;
-            else if (s == tireColliderSizeSlider) valTireCollider = v;
+            
+            if (currentVeh != -1) {
+                infoItem.Text = $"{GetMakeNameFromVehicleModel((uint)GetEntityModel(currentVeh))} {GetDisplayNameFromVehicleModel((uint)GetEntityModel(currentVeh))}";
+                infoItem.Description = $"Size: {GetVehicleWheelSize(currentVeh):F2}  Width: {GetVehicleWheelWidth(currentVeh):F2}";
+            }
         }
 
         private void RefreshStanceCache() {
@@ -266,21 +278,19 @@ namespace CStancer
                 if (!DoesEntityExist(veh.Handle) || veh.Handle == currentVeh) continue;
                 
                 var state = (StateBag)((Entity)veh).State;
-                object data = state.Get(StateData);
-                
-                if (data == null) {
+                if (!Utils.GetStateBool(state, StateInitialized)) {
                     if (stanceCache.ContainsKey(veh.Handle)) stanceCache.Remove(veh.Handle);
                     continue;
                 }
 
                 stanceCache[veh.Handle] = new StanceData {
-                    Track = Utils.GetSafeFloat(data, "track"),
-                    Camber = Utils.GetSafeFloat(data, "camber"),
-                    Suspension = Utils.GetSafeFloat(data, "suspension"),
-                    WheelSize = Utils.GetSafeFloat(data, "wheelsize", 1.0f),
-                    WheelWidth = Utils.GetSafeFloat(data, "wheelwidth", 1.0f),
-                    TireCollider = Utils.GetSafeFloat(data, "tirecollider"),
-                    Target = Utils.GetSafeInt(data, "wheeltarget")
+                    Track = Utils.GetStateFloat(state, StateTrack),
+                    Camber = Utils.GetStateFloat(state, StateCamber),
+                    Suspension = Utils.GetStateFloat(state, StateSuspension),
+                    WheelSize = Utils.GetStateFloat(state, StateWheelSize, 1.0f),
+                    WheelWidth = Utils.GetStateFloat(state, StateWheelWidth, 1.0f),
+                    TireCollider = Utils.GetStateFloat(state, StateTireCollider),
+                    Target = Utils.GetStateInt(state, StateTarget)
                 };
             }
         }
