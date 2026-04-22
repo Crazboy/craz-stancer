@@ -53,6 +53,13 @@ namespace CStancer
             public float WheelWidth;
             public float TireCollider;
             public int Target;
+
+            public bool Equals(StanceData other)
+            {
+                return Track == other.Track && Camber == other.Camber && Suspension == other.Suspension &&
+                       WheelSize == other.WheelSize && WheelWidth == other.WheelWidth &&
+                       TireCollider == other.TireCollider && Target == other.Target;
+            }
         }
 
         public StancerScript()
@@ -62,6 +69,14 @@ namespace CStancer
             
             RegisterCommand("cstancer", new Action<int, List<object>, string>((s, a, r) => ToggleMenu()), false);
             RegisterKeyMapping("cstancer", "Open CStancer Menu", "keyboard", "");
+
+            RegisterCommand("checkstance", new Action<int, List<object>, string>((s, a, r) => {
+                int veh = GetVehiclePedIsIn(PlayerPedId(), false);
+                if (veh == 0) return;
+                var state = (StateBag)((Entity)Entity.FromHandle(veh)).State;
+                object data = state.Get(StateInitialized);
+                Debug.WriteLine($"[CStancer] State Init for {veh}: {(data != null ? data.ToString() : "NULL")}");
+            }), false);
 
             Tick += OnTick;
             Tick += OnDrawTick;
@@ -144,9 +159,13 @@ namespace CStancer
         }
 
         private async Task OnTick() {
+            await BaseScript.Delay(0);
             int ped = PlayerPedId();
-            if (IsPedInAnyVehicle(ped, false)) {
-                currentVeh = GetVehiclePedIsIn(ped, false);
+            int veh = GetVehiclePedIsIn(ped, false);
+
+            // ONLY the driver is allowed to "own" the vehicle's stance menu and local state
+            if (veh != 0 && GetPedInVehicleSeat(veh, -1) == ped) {
+                currentVeh = veh;
                 if (currentVeh != lastVeh) { SyncFromVehicle(currentVeh); lastVeh = currentVeh; }
                 UpdateDescriptions();
             } else {
@@ -163,13 +182,13 @@ namespace CStancer
 
         private async Task OnDrawTick()
         {
-            // Apply all cached stances from other players
+            // Apply all cached stances from other players (including if we are a passenger)
             foreach (var kvp in stanceCache.ToList()) {
                 if (DoesEntityExist(kvp.Key)) ApplyStance(kvp.Key, kvp.Value);
                 else stanceCache.Remove(kvp.Key);
             }
 
-            // Apply local stance immediately
+            // Apply local stance immediately if we are the driver
             if (currentVeh != -1) {
                 ApplyStance(currentVeh, new StanceData {
                     Track = valTrack, Camber = valCamber, Suspension = valSuspension,
@@ -197,7 +216,6 @@ namespace CStancer
         private void PushState() {
             if (currentVeh == -1 || !NetworkGetEntityIsNetworked(currentVeh)) return;
             
-            // Set individual keys for perfect cross-language/cross-client sync
             var state = (StateBag)((Entity)Entity.FromHandle(currentVeh)).State;
             state.Set(StateTrack, valTrack, true);
             state.Set(StateCamber, valCamber, true);
@@ -278,16 +296,18 @@ namespace CStancer
         }
 
         private void RefreshStanceCache() {
+            // Include our current vehicle if we are a passenger, but skip if we are the driver (handled by local state)
             foreach (var veh in World.GetAllVehicles()) {
-                if (!DoesEntityExist(veh.Handle) || veh.Handle == currentVeh) continue;
+                int handle = veh.Handle;
+                if (!DoesEntityExist(handle) || handle == currentVeh) continue;
                 
                 var state = (StateBag)((Entity)veh).State;
                 if (!Utils.GetStateBool(state, StateInitialized)) {
-                    if (stanceCache.ContainsKey(veh.Handle)) stanceCache.Remove(veh.Handle);
+                    if (stanceCache.ContainsKey(handle)) stanceCache.Remove(handle);
                     continue;
                 }
 
-                stanceCache[veh.Handle] = new StanceData {
+                stanceCache[handle] = new StanceData {
                     Track = Utils.GetStateFloat(state, StateTrack),
                     Camber = Utils.GetStateFloat(state, StateCamber),
                     Suspension = Utils.GetStateFloat(state, StateSuspension),
