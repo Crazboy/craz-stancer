@@ -34,7 +34,7 @@ namespace CStancer
         private const float ScaleTireCollider = 100f;
 
         private long lastSyncTime = 0;
-        private Dictionary<int, StanceData> appliedStances = new Dictionary<int, StanceData>();
+        private Dictionary<int, StanceData> stanceCache = new Dictionary<int, StanceData>();
 
         private struct StanceData
         {
@@ -45,13 +45,6 @@ namespace CStancer
             public float WheelWidth;
             public float TireCollider;
             public int Target;
-
-            public bool Equals(StanceData other)
-            {
-                return Track == other.Track && Camber == other.Camber && Suspension == other.Suspension &&
-                       WheelSize == other.WheelSize && WheelWidth == other.WheelWidth &&
-                       TireCollider == other.TireCollider && Target == other.Target;
-            }
         }
 
         public StancerScript()
@@ -61,6 +54,7 @@ namespace CStancer
             RegisterCommand("cstancer", new Action<int, List<object>, string>((s, a, r) => ToggleMenu()), false);
             RegisterKeyMapping("cstancer", "Open CStancer Menu", "keyboard", "none");
             Tick += OnTick;
+            Tick += OnDrawTick;
         }
 
         private void SetupMenu()
@@ -117,6 +111,11 @@ namespace CStancer
             menu.OnItemSelect += (m, item, idx) => {
                 if (item == resetItem) { ClearStance(); SyncFromVehicle(currentVeh); return; }
             };
+
+            // Using list select to trigger sync since change event is missing in this DLL version
+            menu.OnListIndexChange += (m, item, oldIdx, newIdx, itemIdx) => {
+                if (item == wheelTargetList) PushState();
+            };
         }
 
         private float GetScaleForItem(MenuSliderItem item)
@@ -136,7 +135,6 @@ namespace CStancer
         }
 
         private async Task OnTick() {
-            await BaseScript.Delay(0);
             int ped = PlayerPedId();
             if (IsPedInAnyVehicle(ped, false)) {
                 currentVeh = GetVehiclePedIsIn(ped, false);
@@ -151,9 +149,32 @@ namespace CStancer
 
             long now = (long)(DateTime.UtcNow - new DateTime(1970, 1, 1)).TotalMilliseconds;
             if (now - lastSyncTime > 1000) {
-                SyncAllStances();
+                RefreshStanceCache();
                 lastSyncTime = now;
             }
+            await Task.FromResult(0);
+        }
+
+        private async Task OnDrawTick()
+        {
+            // Apply all stances every frame to prevent game engine reset
+            foreach (var kvp in stanceCache.ToList()) {
+                if (DoesEntityExist(kvp.Key)) {
+                    ApplyStance(kvp.Key, kvp.Value);
+                } else {
+                    stanceCache.Remove(kvp.Key);
+                }
+            }
+
+            // Always apply local stance immediately
+            if (currentVeh != -1) {
+                ApplyStance(currentVeh, new StanceData {
+                    Track = valTrack, Camber = valCamber, Suspension = valSuspension,
+                    WheelSize = valWheelSize, WheelWidth = valWheelWidth, TireCollider = valTireCollider,
+                    Target = (int)CurrentWheelTarget
+                });
+            }
+            await Task.FromResult(0);
         }
 
         private static string GetVehicleMake(int veh) => GetMakeNameFromVehicleModel((uint)GetEntityModel(veh));
@@ -237,20 +258,20 @@ namespace CStancer
             else if (s == tireColliderSizeSlider) valTireCollider = v;
         }
 
-        private void SyncAllStances() {
+        private void RefreshStanceCache() {
             foreach (var veh in World.GetAllVehicles()) {
-                if (!DoesEntityExist(veh.Handle)) continue;
+                if (!DoesEntityExist(veh.Handle) || veh.Handle == currentVeh) continue;
                 
                 var state = (StateBag)((Entity)veh).State;
                 object dataObj = state.Get(StateData);
                 var data = dataObj as IDictionary;
                 
                 if (data == null) {
-                    if (appliedStances.ContainsKey(veh.Handle)) appliedStances.Remove(veh.Handle);
+                    if (stanceCache.ContainsKey(veh.Handle)) stanceCache.Remove(veh.Handle);
                     continue;
                 }
 
-                StanceData currentStance = new StanceData {
+                stanceCache[veh.Handle] = new StanceData {
                     Track = Utils.GetSafeFloat(data, "track"),
                     Camber = Utils.GetSafeFloat(data, "camber"),
                     Suspension = Utils.GetSafeFloat(data, "suspension"),
@@ -259,15 +280,6 @@ namespace CStancer
                     TireCollider = Utils.GetSafeFloat(data, "tirecollider"),
                     Target = Utils.GetSafeInt(data, "wheeltarget")
                 };
-
-                if (!appliedStances.TryGetValue(veh.Handle, out StanceData applied) || !applied.Equals(currentStance)) {
-                    ApplyStance(veh.Handle, currentStance);
-                    appliedStances[veh.Handle] = currentStance;
-                }
-            }
-
-            foreach (var handle in appliedStances.Keys.ToList()) {
-                if (!DoesEntityExist(handle)) appliedStances.Remove(handle);
             }
         }
 
