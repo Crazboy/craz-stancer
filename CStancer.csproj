@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net452</TargetFramework>
+    <AssemblyName>CStancer</AssemblyName>
+    <TargetName>$(AssemblyName).net</TargetName>
+    <DebugType>embedded</DebugType>
+    <Configurations>Debug;Release</Configurations>
+    <Platforms>AnyCPU</Platforms>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="Microsoft.CSharp" />
+    <Reference Include="System.Drawing" />
+    <Reference Include="MenuAPI">
+      <HintPath>dependencies\MenuAPI.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="CitizenFX.Core.Client">
+      <HintPath>dependencies\CitizenFX.Core.Client.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+  <Target Name="PostBuild" AfterTargets="PostBuildEvent">
+    <PropertyGroup>
+      <OutFolder>$(ProjectDir)dist\cstancer\</OutFolder>
+    </PropertyGroup>
+    <MakeDir Directories="$(OutFolder)" />
+    <Copy SourceFiles="$(TargetDir)$(TargetName).dll" DestinationFolder="$(OutFolder)" />
+    <Copy SourceFiles="$(TargetDir)MenuAPI.dll"       DestinationFolder="$(OutFolder)" />
+    <Copy SourceFiles="$(ProjectDir)fxmanifest.lua"   DestinationFiles="$(OutFolder)fxmanifest.lua" />
+    <Copy SourceFiles="$(ProjectDir)server.lua"       DestinationFiles="$(OutFolder)server.lua" />
+  </Target>
+
+</Project>

@@ -1,0 +1,13 @@
+# Build artifacts
+bin/
+obj/
+dist/
+
+# Dependencies
+dependencies/
+
+# IDE files
+.vs/
+*.user
+*.suo
+*.sln.docstates
