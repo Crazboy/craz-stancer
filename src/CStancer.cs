@@ -148,6 +148,7 @@ namespace CStancer
             if (IsPedInAnyVehicle(ped, false)) {
                 currentVeh = GetVehiclePedIsIn(ped, false);
                 if (currentVeh != lastVeh) { SyncFromVehicle(currentVeh); lastVeh = currentVeh; }
+                UpdateDescriptions();
             } else {
                 currentVeh = -1;
                 if (lastVeh != -1) { lastVeh = -1; MenuController.CloseAllMenus(); }
@@ -178,14 +179,8 @@ namespace CStancer
             }
         }
 
-        private void SetRealValue(MenuSliderItem s, float v) {
-            if      (s == suspensionSlider)       valSuspension   = v;
-            else if (s == trackSlider)            valTrack        = v;
-            else if (s == camberSlider)           valCamber       = v;
-            else if (s == wheelSizeSlider)        valWheelSize    = v;
-            else if (s == wheelWidthSlider)       valWheelWidth   = v;
-            else if (s == tireColliderSizeSlider) valTireCollider = v;
-        }
+        private static string GetVehicleMake(int veh) => GetMakeNameFromVehicleModel((uint)GetEntityModel(veh));
+        private static string GetVehicleModel(int veh) => GetDisplayNameFromVehicleModel((uint)GetEntityModel(veh));
 
         private void ApplyTypedValue(string target, float value) {
             if (currentVeh == -1) return;
@@ -269,8 +264,17 @@ namespace CStancer
             
             if (currentVeh != -1) {
                 infoItem.Text = $"{GetMakeNameFromVehicleModel((uint)GetEntityModel(currentVeh))} {GetDisplayNameFromVehicleModel((uint)GetEntityModel(currentVeh))}";
-                infoItem.Description = $"Size: {GetVehicleWheelSize(currentVeh):F2}  Width: {GetVehicleWheelWidth(currentVeh):F2}";
+                infoItem.Description = $"T:{valTrack:F2} C:{valCamber:F2} S:{valSuspension:F2} WS:{valWheelSize:F2} WW:{valWheelWidth:F2} TC:{valTireCollider:F2}";
             }
+        }
+
+        private void SetRealValue(MenuSliderItem s, float v) {
+            if      (s == suspensionSlider)       valSuspension   = v;
+            else if (s == trackSlider)            valTrack        = v;
+            else if (s == camberSlider)           valCamber       = v;
+            else if (s == wheelSizeSlider)        valWheelSize    = v;
+            else if (s == wheelWidthSlider)       valWheelWidth   = v;
+            else if (s == tireColliderSizeSlider) valTireCollider = v;
         }
 
         private void RefreshStanceCache() {
