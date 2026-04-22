@@ -194,21 +194,20 @@ namespace CStancer
 
         private void PushState() {
             if (currentVeh == -1 || !NetworkGetEntityIsNetworked(currentVeh)) return;
-            var state = (StateBag)((Entity)Entity.FromHandle(currentVeh)).State;
-            state.Set(StateData, new Dictionary<string, object> {
+            TriggerServerEvent("cstancer:reportStance", NetworkGetNetworkIdFromEntity(currentVeh), new Dictionary<string, object> {
                 ["track"] = valTrack, ["camber"] = valCamber, ["suspension"] = valSuspension,
                 ["wheelsize"] = valWheelSize, ["wheelwidth"] = valWheelWidth, ["tirecollider"] = valTireCollider,
                 ["wheeltarget"] = (int)CurrentWheelTarget
-            }, true);
+            });
         }
 
         private void ClearStance() {
-            if (currentVeh == -1) return;
+            if (currentVeh == -1 || !NetworkGetEntityIsNetworked(currentVeh)) return;
+            TriggerServerEvent("cstancer:clearStance", NetworkGetNetworkIdFromEntity(currentVeh));
             valSuspension = 0f; valTrack = -GetVehicleWheelXOffset(currentVeh, 0);
             valCamber = GetVehicleWheelYRotation(currentVeh, 0);
             valWheelSize = GetVehicleWheelSize(currentVeh); valWheelWidth = GetVehicleWheelWidth(currentVeh); valTireCollider = 0f;
             wheelTargetList.ListIndex = 0;
-            PushState();
             UpdateSliderPositions();
         }
 
