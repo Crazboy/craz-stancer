@@ -237,7 +237,7 @@ namespace CStancer
             valCamber = GetVehicleWheelYRotation(currentVeh, 0);
             valWheelSize = GetVehicleWheelSize(currentVeh); if (valWheelSize < 0.1f) valWheelSize = 1.0f;
             valWheelWidth = GetVehicleWheelWidth(currentVeh); if (valWheelWidth < 0.1f) valWheelWidth = 1.0f;
-            valTireCollider = 0f;
+            valTireCollider = Function.Call<float>((Hash)0xB962D05CUL, currentVeh, 0);
             wheelTargetList.ListIndex = 0;
             UpdateSliderPositions();
         }
@@ -256,7 +256,7 @@ namespace CStancer
                 valSuspension = 0f; valTrack = -GetVehicleWheelXOffset(veh, 0); valCamber = GetVehicleWheelYRotation(veh, 0);
                 valWheelSize  = GetVehicleWheelSize(veh); if (valWheelSize < 0.1f) valWheelSize = 1.0f;
                 valWheelWidth = GetVehicleWheelWidth(veh); if (valWheelWidth < 0.1f) valWheelWidth = 1.0f;
-                valTireCollider = 0f;
+                valTireCollider = Function.Call<float>((Hash)0xB962D05CUL, veh, 0);
                 wheelTargetList.ListIndex = 0;
             }
             UpdateSliderPositions();
