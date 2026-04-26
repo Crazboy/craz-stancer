@@ -67,7 +67,7 @@ namespace CStancer
             MenuController.MenuToggleKey = (Control)(-1);
             SetupMenu();
             
-            RegisterCommand("cstancer", new Action<int, List<object>, string>((s, a, r) => ToggleMenu()), false);
+            RegisterCommand("cstancer", new Action<int, List<object>, string>((s, a, r) => ToggleMenu()), true);
             RegisterKeyMapping("cstancer", "Open CStancer Menu", "keyboard", "");
 
             RegisterCommand("checkstance", new Action<int, List<object>, string>((s, a, r) => {
