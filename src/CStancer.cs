@@ -24,6 +24,7 @@ namespace CStancer
         private float valSuspension = 0f, valTrack = 0f, valCamber = 0f;
         private float valWheelSize = 1.0f, valWheelWidth = 1.0f, valTireCollider = 0f;
         private bool modSuspension, modTrack, modCamber, modWheelSize, modWheelWidth, modTireCollider;
+        private bool isSyncing = false;
 
         // Individual State Bag Keys for reliable cross-client sync
         private const string StateTrack        = "cstancer:track";
@@ -248,13 +249,17 @@ namespace CStancer
             valCamber = GetVehicleWheelYRotation(currentVeh, 0);
             valWheelSize = GetVehicleWheelSize(currentVeh); if (valWheelSize < 0.1f) valWheelSize = 1.0f;
             valWheelWidth = GetVehicleWheelWidth(currentVeh); if (valWheelWidth < 0.1f) valWheelWidth = 1.0f;
-            valTireCollider = Function.Call<float>((Hash)0xB962D05CUL, currentVeh, 0);
+            valTireCollider = Function.Call<float>((Hash)0xE0BA9FE6UL, currentVeh, 0);
             wheelTargetList.ListIndex = 0;
+            
+            isSyncing = true;
             UpdateSliderPositions();
+            isSyncing = false;
         }
 
         private void SyncFromVehicle(int veh) {
             var state = (StateBag)((Entity)Entity.FromHandle(veh)).State;
+            isSyncing = true;
             if (Utils.GetStateBool(state, StateInitialized)) {
                 float? t = Utils.GetStateFloatNullable(state, StateTrack);
                 float? c = Utils.GetStateFloatNullable(state, StateCamber);
@@ -266,20 +271,29 @@ namespace CStancer
                 if (t.HasValue)  { valTrack = t.Value; modTrack = true; }
                 if (c.HasValue)  { valCamber = c.Value; modCamber = true; }
                 if (s.HasValue)  { valSuspension = s.Value; modSuspension = true; }
-                if (ws.HasValue) { valWheelSize = ws.Value; modWheelSize = true; }
-                if (ww.HasValue) { valWheelWidth = ww.Value; modWheelWidth = true; }
-                if (tc.HasValue) { valTireCollider = tc.Value; modTireCollider = true; }
+                if (ws.HasValue && ws.Value > 0.1f) { valWheelSize = ws.Value; modWheelSize = true; }
+                if (ww.HasValue && ww.Value > 0.1f) { valWheelWidth = ww.Value; modWheelWidth = true; }
+                if (tc.HasValue && tc.Value > 0.05f) { valTireCollider = tc.Value; modTireCollider = true; }
 
                 wheelTargetList.ListIndex = Utils.GetStateInt(state, StateTarget);
             } else {
                 modSuspension = modTrack = modCamber = modWheelSize = modWheelWidth = modTireCollider = false;
                 valSuspension = 0f; valTrack = -GetVehicleWheelXOffset(veh, 0); valCamber = GetVehicleWheelYRotation(veh, 0);
-                valWheelSize  = GetVehicleWheelSize(veh); if (valWheelSize < 0.1f) valWheelSize = 1.0f;
-                valWheelWidth = GetVehicleWheelWidth(veh); if (valWheelWidth < 0.1f) valWheelWidth = 1.0f;
-                valTireCollider = Function.Call<float>((Hash)0xB962D05CUL, veh, 0);
+                
+                valWheelSize  = GetVehicleWheelSize(veh); 
+                if (valWheelSize < 0.1f) valWheelSize = 1.0f;
+                
+                valWheelWidth = GetVehicleWheelWidth(veh); 
+                if (valWheelWidth < 0.1f) valWheelWidth = 1.0f;
+                
+                valTireCollider = Function.Call<float>((Hash)0xE0BA9FE6UL, veh, 0);
+                // If it's 0 or very small, it's likely "unset" or invalid default
+                if (valTireCollider < 0.05f) valTireCollider = 0f; 
+
                 wheelTargetList.ListIndex = 0;
             }
             UpdateSliderPositions();
+            isSyncing = false;
             UpdateDescriptions();
         }
 
@@ -307,6 +321,7 @@ namespace CStancer
         }
 
         private void SetRealValue(MenuSliderItem s, float v) {
+            if (isSyncing) return;
             if      (s == suspensionSlider)       { valSuspension   = v; modSuspension = true; }
             else if (s == trackSlider)            { valTrack        = v; modTrack = true; }
             else if (s == camberSlider)           { valCamber       = v; modCamber = true; }
