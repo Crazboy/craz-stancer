@@ -12,6 +12,12 @@ namespace CStancer
         internal static int Clamp(int v, int min, int max) => v < min ? min : v > max ? max : v;
 
         // Safer StateBag retrieval
+        internal static float? GetStateFloatNullable(StateBag s, string key) {
+            object v = s.Get(key);
+            if (v == null) return null;
+            try { return Convert.ToSingle(v); } catch { return null; }
+        }
+
         internal static float GetStateFloat(StateBag s, string key, float defaultValue = 0f) {
             object v = s.Get(key);
             if (v == null) return defaultValue;
